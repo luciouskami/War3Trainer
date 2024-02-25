@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Timers;
 
 namespace War3Trainer
 {
@@ -80,9 +81,13 @@ namespace War3Trainer
         public int ParentNodeIndex { get; private set; }
         public string Caption { get; private set; }
 
-        public UInt32 Address { get; private set; }
+        public uint Address { get; private set; }
         public AddressListValueType ValueType { get; private set; }
         public int ValueScale { get; private set; }
+        public int Locked { get; set; }
+        private Timer Timer;
+        private string ValueString;
+        private int ProcessId { get; set; }
 
         public NewAddressListEventArgs(
             int parentNodeIndex,
@@ -100,12 +105,71 @@ namespace War3Trainer
             AddressListValueType valueType,
             int valueScale)
         {
-            this.ParentNodeIndex = parentNodeIndex;
-            this.Caption = caption;
+            ParentNodeIndex = parentNodeIndex;
+            Caption = caption;
 
-            this.Address = address;
-            this.ValueType = valueType;
-            this.ValueScale = valueScale;
+            Address = address;
+            ValueType = valueType;
+            ValueScale = valueScale;
+            Locked = 0;
+            Timer = null;
+        }
+
+        private void memSetValue(object sender, ElapsedEventArgs e)
+        {
+            // Console.WriteLine("给地址{0}设置了值{1}，locked为{2}, pid为{3}", Address, ValueString, Locked, ProcessId);
+            using (WindowsApi.ProcessMemory mem = new WindowsApi.ProcessMemory(ProcessId))
+            {
+                switch (ValueType)
+                {
+                    case AddressListValueType.Integer:
+                        Int32 intValue;
+                        if (!Int32.TryParse(ValueString, out intValue))
+                            intValue = 0;
+                        intValue = unchecked(intValue * ValueScale);
+                        mem.WriteInt32((IntPtr)Address, intValue);
+                        break;
+                    case AddressListValueType.Float:
+                        float floatValue;
+                        if (!float.TryParse(ValueString, out floatValue))
+                            floatValue = 0;
+                        floatValue = unchecked(floatValue * ValueScale);
+                        mem.WriteFloat((IntPtr)Address, floatValue);
+                        break;
+                    case AddressListValueType.Char4:
+                        mem.WriteChar4((IntPtr)Address, ValueString);
+                        break;
+                }
+            }
+        }
+
+        private void setLocked(int isLocked)
+        {
+            Locked = isLocked;
+            if (isLocked == 0)
+            {
+                if (Timer!= null)
+                {
+                    Timer.Dispose();
+                    Timer = null;
+                }
+                memSetValue(null, null);
+            } else if (isLocked > 0 && Timer == null)
+            {
+                // 每2s循环设置一次
+                // 只在需要锁定时才创建定时器
+                Timer = new Timer(2000);
+                Timer.Elapsed += new ElapsedEventHandler(memSetValue);
+                Timer.AutoReset = true;
+                Timer.Enabled = true;
+            }
+        }
+
+        public void setValue(string value, int isLocked, int pid)
+        {
+            ValueString = value;
+            ProcessId = pid;
+            setLocked(isLocked);
         }
     }
 
@@ -117,6 +181,8 @@ namespace War3Trainer
         UInt32               Address     { get; }
         AddressListValueType ValueType   { get; }
         int                  ValueScale  { get; }
+        int                  Locked      { get; set; }
+        void                 setValue(string value, int isLocked, int pid);
     }
 
     #endregion
@@ -183,6 +249,12 @@ namespace War3Trainer
         public UInt32 Address { get { return _AddresInfo.Address; } }
         public AddressListValueType ValueType { get { return _AddresInfo.ValueType; } }
         public int ValueScale { get { return _AddresInfo.ValueScale; } }
+        public int Locked { get { return _AddresInfo.Locked; } set { _AddresInfo.Locked = value; } }
+
+        public void setValue(string value, int isLocked, int pid)
+        {
+            _AddresInfo.setValue(value, isLocked, pid);
+        }
     }
 
     #endregion

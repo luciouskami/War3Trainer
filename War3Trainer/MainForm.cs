@@ -184,7 +184,8 @@ namespace War3Trainer
                     {
                         addressLine.Caption,    // Caption
                         "",                     // Original value
-                        ""                      // Modified value
+                        "",                     // Modified value
+                        ""                      // Locked
                     }));
                 viewData.Items[viewData.Items.Count - 1].Tag = addressLine;
             }
@@ -216,7 +217,8 @@ namespace War3Trainer
                             itemValue = "";
                             break;
                     }
-                    currentItem.SubItems[1].Text = itemValue.ToString();
+                    currentItem.SubItems[1/* Original value */].Text = itemValue.ToString();
+                    currentItem.SubItems[3/* Locked */].Text = addressLine.Locked == 0 ? "" : string.Format("已锁定为：{0}", itemValue.ToString());
                 }
             }
         }
@@ -228,7 +230,10 @@ namespace War3Trainer
             {
                 foreach (ListViewItem currentItem in viewData.Items)
                 {
-                    string itemValueString = currentItem.SubItems[2].Text;
+                    string[] itemStringList = currentItem.SubItems[2].Text.Split('/');
+                    string itemValueString = itemStringList[0];
+                    string itemLockedString = itemStringList.Length == 1 ? "" : itemStringList[1];
+
                     if (String.IsNullOrEmpty(itemValueString))
                     {
                         // Not modified
@@ -239,27 +244,30 @@ namespace War3Trainer
                     if (addressLine == null)
                         continue;
 
-                    switch (addressLine.ValueType)
-                    {
-                        case AddressListValueType.Integer:
-                            Int32 intValue;
-                            if (!Int32.TryParse(itemValueString, out intValue))
-                                intValue = 0;
-                            intValue = unchecked(intValue * addressLine.ValueScale);
-                            mem.WriteInt32((IntPtr)addressLine.Address, intValue);
-                            break;
-                        case AddressListValueType.Float:
-                            float floatValue;
-                            if (!float.TryParse(itemValueString, out floatValue))
-                                floatValue = 0;
-                            floatValue = unchecked(floatValue * addressLine.ValueScale);
-                            mem.WriteFloat((IntPtr)addressLine.Address, floatValue);
-                            break;
-                        case AddressListValueType.Char4:
-                            mem.WriteChar4((IntPtr)addressLine.Address, itemValueString);
-                            break;
-                    }
+                    //switch (addressLine.ValueType)
+                    //{
+                    //    case AddressListValueType.Integer:
+                    //        Int32 intValue;
+                    //        if (!Int32.TryParse(itemValueString, out intValue))
+                    //            intValue = 0;
+                    //        intValue = unchecked(intValue * addressLine.ValueScale);
+                    //        mem.WriteInt32((IntPtr)addressLine.Address, intValue);
+                    //        break;
+                    //    case AddressListValueType.Float:
+                    //        float floatValue;
+                    //        if (!float.TryParse(itemValueString, out floatValue))
+                    //            floatValue = 0;
+                    //        floatValue = unchecked(floatValue * addressLine.ValueScale);
+                    //        mem.WriteFloat((IntPtr)addressLine.Address, floatValue);
+                    //        break;
+                    //    case AddressListValueType.Char4:
+                    //        mem.WriteChar4((IntPtr)addressLine.Address, itemValueString);
+                    //        break;
+                    //}
                     currentItem.SubItems[2].Text = "";
+                    if (!Int32.TryParse(itemLockedString, out int Locked))
+                        Locked = 0;
+                    addressLine.setValue(itemValueString, Locked, _currentGameContext.ProcessId);
                 }
             }
         }
@@ -468,7 +476,7 @@ namespace War3Trainer
             // Enable editing
             txtInput.Visible = true;
             txtInput.Focus();
-            txtInput.Select(0, 0);  // Cancel select all
+            txtInput.Select(this.Text.Length, 0);  // Cancel select all
         }
 
         private void viewData_ColumnWidthChanging(object sender, ColumnWidthChangingEventArgs e)
